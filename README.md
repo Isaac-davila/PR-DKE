@@ -21,8 +21,8 @@ Der Agent ermöglicht den Upload von MP3-Dateien und transkribiert diese mithilf
    `streamlit run app.py`
 
 ## Team
-- Isaac
 - Jason
 - Adem
 - Paul
 - Elias
+- Isaac Davila Mendez
