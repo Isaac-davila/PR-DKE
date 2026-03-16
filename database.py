@@ -24,3 +24,12 @@ def get_transcription_history(limit=5):
         .limit(limit) \
         .execute()
     return response.data
+
+def get_transcription_history(limit=15):
+    """Holt die neuesten Einträge inklusive ID."""
+    response = supabase.table("Transcriptions") \
+        .select("id, filename, content, created_at") \
+        .order("created_at", desc=True) \
+        .limit(limit) \
+        .execute()
+    return response.data

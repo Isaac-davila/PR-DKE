@@ -1,32 +1,42 @@
 import streamlit as st
-from views import render_ui, render_history
+from views import render_ui, render_sidebar_history
 from ai_service import transcribe_audio
 from database import save_to_supabase, get_transcription_history
 
+# START
+# streamlit run app.py
 
-# Start code: streamlit run app.py
+#COMMIT
+# git add .
+# git commit -m "Refactoring: App modularisiert in database, ai_service und views"
+# git push origin main
 
-# 1. UI rendern
-uploaded_file = render_ui()
+# 1. History laden für die Sidebar
+history_data = get_transcription_history(limit=15)
+selected_old_chat = render_sidebar_history(history_data)
 
-# 2. Transkriptions-Logik
-if uploaded_file is not None:
+# 2. Haupt-UI rendern
+selected_action, uploaded_file = render_ui()
+
+# 3. Logik: Zeige entweder den ausgewählten alten Chat ODER den neuen Upload
+if selected_old_chat:
+    st.divider()
+    st.subheader(f"Historie: {selected_old_chat['filename']}")
+    st.info(f"Aktion: {selected_action}")  # Zeigt die aktuell gewählte Aktion an
+    st.write(selected_old_chat['content'])
+
+elif uploaded_file is not None:
     st.audio(uploaded_file)
 
-    if st.button("Transkribieren & Speichern"):
-        with st.spinner("Whisper KI extrahiert Text..."):
+    if st.button(f"{selected_action} starten"):
+        with st.spinner(f"KI arbeitet: {selected_action}..."):
             try:
-                # KI Service nutzen
                 text_result = transcribe_audio(uploaded_file)
+                # Hier könnte man je nach 'selected_action' den Text noch bearbeiten
 
-                # Datenbank Service nutzen
                 save_to_supabase(uploaded_file.name, text_result)
-
-                st.success("✅ Erfolgreich transkribiert und gespeichert!")
-                st.text_area("Extrahiert:", value=text_result, height=200)
+                st.success("Erledigt!")
+                st.write(text_result)
+                st.rerun()  # Damit der neue Eintrag sofort in der Sidebar erscheint
             except Exception as e:
-                st.error(f"Fehler im Ablauf: {e}")
-
-# 3. History anzeigen
-history_data = get_transcription_history()
-render_history(history_data)
+                st.error(f"Fehler: {e}")
