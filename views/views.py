@@ -11,7 +11,22 @@ def render_ui():
         )
     with col2:
         uploaded_file = st.file_uploader("", type=["mp3"], label_visibility="collapsed")
-    return action, uploaded_file
+
+        # Pipeline mode selector
+    st.caption("🔧 Pipeline-Modus")
+    mode = st.radio(
+        "Pipeline",
+        options=["groq", "groq_local", "assemblyai"],
+        format_func=lambda x: {
+            "groq":       "☁️ Groq (nur Transkription)",
+            "groq_local": "💻 Groq + Lokale Diarisierung (CUDA)",
+            "assemblyai": "☁️ AssemblyAI (Transkription + Diarisierung)"
+        }[x],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
+    return action, uploaded_file, mode
 
 def render_sidebar_history(entries):
     with st.sidebar:

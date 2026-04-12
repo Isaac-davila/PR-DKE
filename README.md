@@ -20,6 +20,15 @@ Der Agent ermöglicht den Upload von MP3-Dateien und transkribiert diese mithilf
 5. App starten:
    `streamlit run app.py`
 
+## Addendum zur Installation:
+[requirements.txt](requirements.txt) erstellt - hier sind alle Abhängigkeiten drin. Bei manueller Installation kracht es sehr oft, daher empfehle ich im Projekt Python 3.11 zu verwenden und die benötigten Plugins über requirements.txt zu holen:
+
+`py -3.11 -m venv .venv`  
+`.\.venv\Scripts\pip.exe install -r requirements.txt`
+
+Start wie oben oder noch besser so:  
+`.\.venv\Scripts\streamlit.exe run app.py`
+
 ## Team
 - Jason
 - Adem
