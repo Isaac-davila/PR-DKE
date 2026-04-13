@@ -1,5 +1,7 @@
 import os
 import tempfile
+
+from assemblyai import SpeechModel
 from dotenv import load_dotenv
 from ai_service import transcribe_audio, process_with_ai_action
 from diarize import diarize
@@ -94,7 +96,7 @@ def _run_assemblyai(uploaded_file, action: str) -> str:
     if not aai.settings.api_key:
         raise ValueError("ASSEMBLYAI_API_KEY not found in .env file.")
 
-    config = aai.TranscriptionConfig(speaker_labels=True)
+    config = aai.TranscriptionConfig(speaker_labels=True, speech_models=["universal-2"]) #fuck this
     transcriber = aai.Transcriber()
     transcript = transcriber.transcribe(uploaded_file, config=config)
 

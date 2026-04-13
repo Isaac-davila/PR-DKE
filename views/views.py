@@ -10,7 +10,7 @@ def render_ui():
             label_visibility="collapsed"
         )
     with col2:
-        uploaded_file = st.file_uploader("", type=["mp3"], label_visibility="collapsed")
+        uploaded_file = st.file_uploader("Upload Audio", type=["mp3"], label_visibility="collapsed")
 
         # Pipeline mode selector
     st.caption("🔧 Pipeline-Modus")
@@ -19,7 +19,7 @@ def render_ui():
         options=["groq", "groq_local", "assemblyai"],
         format_func=lambda x: {
             "groq":       "☁️ Groq (nur Transkription)",
-            "groq_local": "💻 Groq + Lokale Diarisierung (CUDA)",
+            "groq_local": "💻 Groq + Lokale Diarisierung (CPU, takes up to 5-20x the file length)", #TODO remove?
             "assemblyai": "☁️ AssemblyAI (Transkription + Diarisierung)"
         }[x],
         horizontal=True,

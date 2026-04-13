@@ -94,11 +94,16 @@ def main():
                         ai_tags = []
                         save_to_supabase(uploaded_file.name, text_result, user.id, ai_tags)
                         st.success("Erledigt!")
+                        st.session_state.last_result = text_result
                         st.write(text_result)
                         time.sleep(1)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Fehler: {e}")
+            # Makes sure the result actually gets displayed
+            if "last_result" in st.session_state and not selected_old_chat:
+                st.success("Erledigt!")
+                st.write(st.session_state.last_result)
 
 
 if __name__ == "__main__":

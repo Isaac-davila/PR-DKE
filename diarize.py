@@ -53,7 +53,10 @@ def diarize(audio_path: str) -> list[dict]:
     diarization = pipeline(audio_input).speaker_diarization
 
     segments = []
-    for segment, _, speaker in diarization:
+    count = 0;
+    for segment, _, speaker in diarization.itertracks(yield_label=True):
+        print(f"count {count}")
+        count += 1
         segments.append({
             "speaker": speaker,
             "start": round(segment.start, 3),
