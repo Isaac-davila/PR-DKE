@@ -14,14 +14,15 @@ def transcribe_audio(uploaded_file):
     )
     return transcription.text
 
-def process_with_ai_action(uploaded_file, action, available_tags=None):
-    raw_text = transcribe_audio(uploaded_file)
-    if action == "Transkribieren": return raw_text, []
-
+def process_with_ai_action(transcript, action, available_tags=None):
     prompts = {"Zusammenfassen": "Fasse kurz zusammen.", "Wichtige Punkte extrahieren": "Extrahiere Kernpunkte."}
+
+    if action == "Transkribieren":
+        return transcript, []
+
     completion = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "system", "content": prompts.get(action, "")},
-                  {"role": "user", "content": raw_text}]
+                  {"role": "user", "content": transcript}]
     )
     return completion.choices[0].message.content, []
