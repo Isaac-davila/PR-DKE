@@ -18,6 +18,8 @@ def process_with_ai_action(uploaded_file, action, available_tags=None):
     raw_text = transcribe_audio(uploaded_file)
     if action == "Transkribieren": return raw_text, []
 
+    # TODO:
+    # Expand prompts to provide better output quality. Keep diarization and the pipeline in mind
     prompts = {"Zusammenfassen": "Fasse kurz zusammen.", "Wichtige Punkte extrahieren": "Extrahiere Kernpunkte."}
     completion = client.chat.completions.create(
         model="llama-3.3-70b-versatile",

@@ -107,7 +107,6 @@ def get_all_users(): return supabase.table("profiles").select("*").execute().dat
 
 def get_all_tags(): return supabase.table("tags").select("*").execute().data
 
-
 def get_user_tags(user_id):
     res = supabase.table("user_tags").select("tags(name)").eq("user_id", user_id).execute()
     return [item['tags']['name'] for item in res.data if item.get('tags')]

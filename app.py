@@ -1,5 +1,7 @@
 import streamlit as st
 import time
+
+from pipeline import run_pipeline
 from views.views import render_ui, render_sidebar_history
 from ai_service import process_with_ai_action
 from database import (
@@ -78,7 +80,7 @@ def main():
     if st.session_state.view == "admin" and user_is_admin:
         render_admin_view(user)
     else:
-        selected_action, uploaded_file = render_ui()
+        selected_action, uploaded_file, pipeline_mode = render_ui()
         if selected_old_chat:
             st.divider()
             st.subheader(f"Historie: {selected_old_chat['filename']}")
@@ -88,14 +90,20 @@ def main():
             if st.button(f"{selected_action} starten"):
                 with st.spinner("KI arbeitet..."):
                     try:
-                        text_result, ai_tags = process_with_ai_action(uploaded_file, selected_action)
+                        text_result = run_pipeline(uploaded_file, selected_action, pipeline_mode)
+                        ai_tags = []
                         save_to_supabase(uploaded_file.name, text_result, user.id, ai_tags)
                         st.success("Erledigt!")
+                        st.session_state.last_result = text_result
                         st.write(text_result)
                         time.sleep(1)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Fehler: {e}")
+            # Makes sure the result actually gets displayed
+            if "last_result" in st.session_state and not selected_old_chat:
+                st.success("Erledigt!")
+                st.write(st.session_state.last_result)
 
 
 if __name__ == "__main__":
