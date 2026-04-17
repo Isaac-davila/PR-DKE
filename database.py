@@ -96,8 +96,8 @@ def get_transcription_history(user_id=None, limit=15):
         return []
 
 
-def save_to_supabase(filename, text_content, user_id, tag_ids=None):
-    data = {"filename": filename, "content": text_content, "user_id": user_id, "tag_ids": tag_ids or []}
+def save_to_supabase(filename, text_content, user_id, transcript=None, tag_ids=None):
+    data = {"filename": filename, "content": text_content, "transcript": transcript, "user_id": user_id, "tag_ids": tag_ids or []}
     return supabase.table("transcriptions").insert(data).execute()
 
 
@@ -123,3 +123,7 @@ def remove_tag_from_user(user_id, tag_name):
     tag_res = supabase.table("tags").select("id").eq("name", tag_name).execute()
     if not tag_res.data: return False
     return supabase.table("user_tags").delete().eq("user_id", user_id).eq("tag_id", tag_res.data[0]['id']).execute()
+
+def update_transcription_entry(entry_id, text_content, tag_ids = None):
+    data = {"content": text_content, "tag_ids": tag_ids or []}
+    return supabase.table("transcriptions").update(data).eq("id", entry_id).execute()

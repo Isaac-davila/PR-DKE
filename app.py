@@ -4,9 +4,11 @@ import time
 from pipeline import run_pipeline
 from views.views import render_ui, render_sidebar_history
 from ai_service import process_with_ai_action
+from ai_service import transcribe_audio
 from database import (
     supabase,
     save_to_supabase,
+    update_transcription_entry,
     get_transcription_history,
     get_current_user,
     login_with_google,
@@ -24,6 +26,11 @@ def main():
         st.session_state.user = None
     if "view" not in st.session_state:
         st.session_state.view = "main"
+
+    if "current_transcript" not in st.session_state: st.session_state.current_transcript = None
+    if "current_filename" not in st.session_state: st.session_state.current_filename = None
+    if "current_results" not in st.session_state: st.session_state.current_results = []
+    if "current_entry_id" not in st.session_state: st.session_state.current_entry_id = None
 
     # Token Exchange
     if "code" in st.query_params:
@@ -90,21 +97,48 @@ def main():
             if st.button(f"{selected_action} starten"):
                 with st.spinner("KI arbeitet..."):
                     try:
-                        text_result = run_pipeline(uploaded_file, selected_action, pipeline_mode)
-                        ai_tags = []
-                        save_to_supabase(uploaded_file.name, text_result, user.id, ai_tags)
+                        st.session_state.current_filename = []
+                        st.session_state.current_entry_id = None
+                        if pipeline_mode == "Groq (nur Transkription)":
+                            transcript = transcribe_audio(uploaded_file)
+                        elif pipeline_mode == "Groq + Lokale Diarisierung (CPU)":
+                            transcript = run_pipeline(uploaded_file, "Transkribieren", "local")
+                        elif pipeline_mode == "AssemblyAI (Transkription + Diarisierung)":
+                            transcript = run_pipeline(uploaded_file, "Transkribieren", "assembly")
+                        else:
+                            transcript = transcribe_audio(uploaded_file)
+                        st.session_state.current_transcript = transcript
+                        st.session_state.current_filename = uploaded_file.name
+                        text_result, ai_tags = process_with_ai_action(transcript, selected_action)
+                        result = save_to_supabase(uploaded_file.name, text_result, user.id, transcript, ai_tags)
+                        if(result.data and len(result.data) > 0):
+                            st.session_state.current_entry_id = result.data[0]["id"]
+                        st.session_state.current_results.append({"action": selected_action,"result": text_result})
                         st.success("Erledigt!")
-                        st.session_state.last_result = text_result
                         st.write(text_result)
-                        time.sleep(1)
-                        st.rerun()
                     except Exception as e:
                         st.error(f"Fehler: {e}")
-            # Makes sure the result actually gets displayed
-            if "last_result" in st.session_state and not selected_old_chat:
-                st.success("Erledigt!")
-                st.write(st.session_state.last_result)
-
-
+        if st.session_state.current_transcript:
+            st.divider()
+            st.subheader("Aktueller Chat")
+            if st.session_state.current_filename:
+                st.caption(f"Datei: {st.session_state.current_filename}")
+            for item in st.session_state.current_results:
+                st.write(f"**{item['action']}**")
+                st.write(item["result"])
+            followup_action = st.selectbox("Weitere Aktion auf aktuelles Transkript anwenden",
+                ["Zusammenfassen", "Wichtige Punkte extrahieren"],
+                key="current_followup_action" )
+            if st.button("Weiter mit aktuellem Chat"):
+                with st.spinner("KI arbeitet..."):
+                    try:
+                        text_result, ai_tags = process_with_ai_action(st.session_state.current_transcript, followup_action)
+                        if st.session_state.current_entry_id:
+                            update_transcription_entry(st.session_state.current_entry_id, text_result, tag_ids=ai_tags)
+                        st.session_state.current_results.append({"action": followup_action, "result": text_result})
+                        st.success("Neues Ergebnis erstellt!")
+                        st.write(text_result)
+                    except Exception as e:
+                        st.error(f"Fehler: {e}")
 if __name__ == "__main__":
     main()
