@@ -1,5 +1,7 @@
 import streamlit as st
 import time
+
+from pipeline import run_pipeline
 from views.views import render_ui, render_sidebar_history
 from ai_service import process_with_ai_action
 from ai_service import transcribe_audio
@@ -85,20 +87,26 @@ def main():
     if st.session_state.view == "admin" and user_is_admin:
         render_admin_view(user)
     else:
-        selected_action, uploaded_file = render_ui()
+        selected_action, uploaded_file, pipeline_mode = render_ui()
         if selected_old_chat:
             st.divider()
             st.subheader(f"Historie: {selected_old_chat['filename']}")
             st.write(selected_old_chat['content'])
         elif uploaded_file:
             st.audio(uploaded_file)
-
             if st.button(f"{selected_action} starten"):
                 with st.spinner("KI arbeitet..."):
                     try:
                         st.session_state.current_filename = []
                         st.session_state.current_entry_id = None
-                        transcript = transcribe_audio(uploaded_file)
+                        if pipeline_mode == "Groq (nur Transkription)":
+                            transcript = transcribe_audio(uploaded_file)
+                        elif pipeline_mode == "Groq + Lokale Diarisierung (CPU)":
+                            transcript = run_pipeline(uploaded_file, "Transkribieren", "local")
+                        elif pipeline_mode == "AssemblyAI (Transkription + Diarisierung)":
+                            transcript = run_pipeline(uploaded_file, "Transkribieren", "assembly")
+                        else:
+                            transcript = transcribe_audio(uploaded_file)
                         st.session_state.current_transcript = transcript
                         st.session_state.current_filename = uploaded_file.name
                         text_result, ai_tags = process_with_ai_action(transcript, selected_action)
