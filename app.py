@@ -1,3 +1,5 @@
+import os
+
 import streamlit as st
 import time
 
@@ -94,12 +96,27 @@ def main():
             st.divider()
             st.subheader(f"Historie: {selected_old_chat['filename']}")
             st.write(selected_old_chat['content'])
-            markdown_content = f"# Historie: {selected_old_chat['filename']}\n\n---\n\n{selected_old_chat['content']}"
+
+            markdown_content = f"""# 📄 Historie Export
+
+**Datei:** {selected_old_chat['filename']}  
+**Typ:** Gespeicherter Eintrag  
+
+---
+
+## 📝 Inhalt
+{selected_old_chat['content']}
+"""
+
+            st.info("⬇️ Download verfügbar")
+            clean_filename = os.path.splitext(selected_old_chat['filename'])[0]
+
             st.download_button(
                 label="⬇️ Historie als Markdown herunterladen",
                 data=markdown_content,
-                file_name=f"{selected_old_chat['filename']}.md",
-                mime="text/markdown"
+                file_name=f"historie_{clean_filename}.md",
+                mime="text/markdown",
+                key=f"download_history_{selected_old_chat['id']}"
             )
         elif uploaded_file:
             st.audio(uploaded_file)
@@ -154,13 +171,26 @@ def main():
                         st.error(f"Fehler: {e}")
 
         if not selected_old_chat and "last_result" in st.session_state:
-            markdown_content = f"# 📄 {st.session_state.last_action}\n\n---\n\n{st.session_state.last_result}"
+            markdown_content = f"""# 📄 KI Ergebnis
+
+**Datei:** {st.session_state.last_filename}  
+**Aktion:** {st.session_state.last_action}  
+
+---
+
+## 🧠 Ergebnis
+{st.session_state.last_result}
+"""
+
+            st.info("⬇️ Download verfügbar")   
+            clean_filename = os.path.splitext(st.session_state.last_filename)[0]
 
             st.download_button(
-                label="⬇️ Transkript herunterladen",
+                label="⬇️ Ergebnis als Markdown herunterladen",
                 data=markdown_content,
-                file_name=f"{st.session_state.last_filename}.md",
-                mime="text/markdown"
+                file_name=f"{st.session_state.last_action}_{clean_filename}.md",
+                mime="text/markdown",
+                key=f"download_result_{st.session_state.last_filename}"
             )
 if __name__ == "__main__":
     main()
