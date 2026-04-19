@@ -22,6 +22,8 @@ from views.admin_view import render_admin_view
 def main():
     st.set_page_config(page_title="DKE Audio Agent", layout="wide")
 
+    if "result" not in st.session_state:
+        st.session_state.result = None
     if "user" not in st.session_state:
         st.session_state.user = None
     if "view" not in st.session_state:
@@ -92,6 +94,13 @@ def main():
             st.divider()
             st.subheader(f"Historie: {selected_old_chat['filename']}")
             st.write(selected_old_chat['content'])
+            markdown_content = f"# Historie: {selected_old_chat['filename']}\n\n---\n\n{selected_old_chat['content']}"
+            st.download_button(
+                label="⬇️ Historie als Markdown herunterladen",
+                data=markdown_content,
+                file_name=f"{selected_old_chat['filename']}.md",
+                mime="text/markdown"
+            )
         elif uploaded_file:
             st.audio(uploaded_file)
             if st.button(f"{selected_action} starten"):
@@ -116,6 +125,9 @@ def main():
                         st.session_state.current_results.append({"action": selected_action,"result": text_result})
                         st.success("Erledigt!")
                         st.write(text_result)
+                        st.session_state.last_result = text_result
+                        st.session_state.last_filename = uploaded_file.name
+                        st.session_state.last_action = selected_action
                     except Exception as e:
                         st.error(f"Fehler: {e}")
         if st.session_state.current_transcript:
@@ -140,5 +152,15 @@ def main():
                         st.write(text_result)
                     except Exception as e:
                         st.error(f"Fehler: {e}")
+
+        if not selected_old_chat and "last_result" in st.session_state:
+            markdown_content = f"# 📄 {st.session_state.last_action}\n\n---\n\n{st.session_state.last_result}"
+
+            st.download_button(
+                label="⬇️ Transkript herunterladen",
+                data=markdown_content,
+                file_name=f"{st.session_state.last_filename}.md",
+                mime="text/markdown"
+            )
 if __name__ == "__main__":
     main()
