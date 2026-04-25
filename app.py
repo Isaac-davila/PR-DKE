@@ -1,8 +1,16 @@
 import os
+import re
 
 import streamlit as st
 import time
+import io
+import datetime
 
+try:
+    from docx import Document
+    DOCX_AVAILABLE = True
+except:
+    DOCX_AVAILABLE = False
 from pipeline import run_pipeline
 from views.views import render_ui, render_sidebar_history
 from ai_service import process_with_ai_action
@@ -97,10 +105,12 @@ def main():
             st.subheader(f"Historie: {selected_old_chat['filename']}")
             st.write(selected_old_chat['content'])
 
-            markdown_content = f"""# 📄 Historie Export
+            timestamp = datetime.datetime.now().strftime("%d.%m.%Y • %H:%M Uhr")
+            markdown_content = f"""# 📄 Historie
 
 **Datei:** {selected_old_chat['filename']}  
 **Typ:** Gespeicherter Eintrag  
+**Heruntergeladen am:** {timestamp}
 
 ---
 
@@ -108,14 +118,61 @@ def main():
 {selected_old_chat['content']}
 """
 
-            st.info("⬇️ Download verfügbar")
+            st.divider()
+            st.subheader("📥 Download")
+            formats = ["Markdown (.md)", "Text (.txt)"]
+            if DOCX_AVAILABLE:
+                formats.append("Word (.docx)")
+
+            format_choice_history = st.selectbox(
+                "Format auswählen (Historie)",
+                formats,
+                key="download_format_history"
+            )
+
             clean_filename = os.path.splitext(selected_old_chat['filename'])[0]
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+            safe_filename = re.sub(r'[^a-zA-Z0-9_]', '', clean_filename.lower().replace(" ", "_"))
+            safe_type = "historie"
+
+            if format_choice_history == "Markdown (.md)":
+                file_data = markdown_content
+                file_name = f"{date_str}_{safe_type}_{safe_filename}.md"
+                mime = "text/markdown"
+
+            elif format_choice_history == "Text (.txt)":
+                plain_text = markdown_content.replace("# ", "").replace("## ", "")
+                file_data = plain_text
+                file_name = f"{date_str}_{safe_type}_{safe_filename}.txt"
+                mime = "text/plain"
+
+            elif format_choice_history == "Word (.docx)" and DOCX_AVAILABLE:
+                doc = Document()
+                doc.add_heading("Historie", 0)
+
+                for line in markdown_content.split("\n"):
+                    if line.startswith("# "):
+                        doc.add_heading(line.replace("# ", ""), level=1)
+                    elif line.startswith("## "):
+                        doc.add_heading(line.replace("## ", ""), level=2)
+                    elif line.startswith("- "):
+                        doc.add_paragraph(line, style="List Bullet")
+                    else:
+                        doc.add_paragraph(line)
+
+                buffer = io.BytesIO()
+                doc.save(buffer)
+                buffer.seek(0)
+
+                file_data = buffer
+                file_name = f"{date_str}_{safe_type}_{safe_filename}.docx"
+                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
             st.download_button(
-                label="⬇️ Historie als Markdown herunterladen",
-                data=markdown_content,
-                file_name=f"historie_{clean_filename}.md",
-                mime="text/markdown",
+                label=f"⬇️ Als {format_choice_history} herunterladen",
+                data=file_data,
+                file_name=file_name,
+                mime=mime,
                 key=f"download_history_{selected_old_chat['id']}"
             )
         elif uploaded_file:
@@ -123,7 +180,7 @@ def main():
             if st.button(f"{selected_action} starten"):
                 with st.spinner("KI arbeitet..."):
                     try:
-                        st.session_state.current_filename = []
+                        st.session_state.current_filename = None
                         st.session_state.current_entry_id = None
                         if pipeline_mode == "Groq (nur Transkription)":
                             transcript = transcribe_audio(uploaded_file)
@@ -171,26 +228,80 @@ def main():
                         st.error(f"Fehler: {e}")
 
         if not selected_old_chat and "last_result" in st.session_state:
+            timestamp = datetime.datetime.now().strftime("%d.%m.%Y • %H:%M Uhr")
             markdown_content = f"""# 📄 KI Ergebnis
 
 **Datei:** {st.session_state.last_filename}  
 **Aktion:** {st.session_state.last_action}  
+**Heruntergeladen am:** {timestamp}
 
 ---
 
-## 🧠 Ergebnis
+## 📝 Inhalt
 {st.session_state.last_result}
 """
+            
+            st.divider()
+            st.subheader("📥 Download")
+            formats = ["Markdown (.md)", "Text (.txt)"]
+            if DOCX_AVAILABLE:
+                formats.append("Word (.docx)")
 
-            st.info("⬇️ Download verfügbar")   
+            format_choice = st.selectbox(
+                "Format auswählen",
+                formats,
+                key="download_format"
+            )
+
             clean_filename = os.path.splitext(st.session_state.last_filename)[0]
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+            safe_filename = re.sub(r'[^a-zA-Z0-9_]', '', clean_filename.lower().replace(" ", "_"))
+            safe_action = re.sub(
+                r'[^a-zA-Z0-9_]', 
+                '', 
+                st.session_state.last_action.lower().replace(" ", "_")
+            )
+
+            if format_choice == "Markdown (.md)":
+                file_data = markdown_content
+                file_name = f"{date_str}_{safe_action}_{safe_filename}.md"
+                mime = "text/markdown"
+
+            elif format_choice == "Text (.txt)":
+                plain_text = markdown_content.replace("# ", "").replace("## ", "")
+                file_data = plain_text
+                file_name = f"{date_str}_{safe_action}_{safe_filename}.txt"
+                mime = "text/plain"
+
+            elif format_choice == "Word (.docx)" and DOCX_AVAILABLE:
+                doc = Document()
+                doc.add_heading(f"KI Ergebnis – {st.session_state.last_action}", 0)
+
+                # Markdown grob in Word übernehmen
+                for line in markdown_content.split("\n"):
+                    if line.startswith("# "):
+                        doc.add_heading(line.replace("# ", ""), level=1)
+                    elif line.startswith("## "):
+                        doc.add_heading(line.replace("## ", ""), level=2)
+                    elif line.startswith("- "):
+                        doc.add_paragraph(line, style="List Bullet")
+                    else:
+                        doc.add_paragraph(line)
+
+                buffer = io.BytesIO()
+                doc.save(buffer)
+                buffer.seek(0)
+
+                file_data = buffer
+                file_name = f"{date_str}_{safe_action}_{safe_filename}.docx"
+                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
             st.download_button(
-                label="⬇️ Ergebnis als Markdown herunterladen",
-                data=markdown_content,
-                file_name=f"{st.session_state.last_action}_{clean_filename}.md",
-                mime="text/markdown",
-                key=f"download_result_{st.session_state.last_filename}"
+                label=f"⬇️ Als {format_choice} herunterladen",
+                data=file_data,
+                file_name=file_name,
+                mime=mime,
+                key=f"download_result_{clean_filename}"
             )
 if __name__ == "__main__":
     main()
