@@ -1,16 +1,9 @@
 import os
-import re
 
 import streamlit as st
-import time
-import io
 import datetime
 
-try:
-    from docx import Document
-    DOCX_AVAILABLE = True
-except:
-    DOCX_AVAILABLE = False
+from download_service import DownloadService
 from pipeline import run_pipeline
 from views.views import render_ui, render_sidebar_history
 from ai_service import process_with_ai_action
@@ -105,7 +98,7 @@ def main():
             st.subheader(f"Historie: {selected_old_chat['filename']}")
             st.write(selected_old_chat['content'])
 
-            timestamp = datetime.datetime.now().strftime("%d.%m.%Y • %H:%M Uhr")
+            timestamp = DownloadService.get_timestamp()
             markdown_content = f"""# 📄 Historie
 
 **Datei:** {selected_old_chat['filename']}  
@@ -120,9 +113,7 @@ def main():
 
             st.divider()
             st.subheader("📥 Download")
-            formats = ["Markdown (.md)", "Text (.txt)"]
-            if DOCX_AVAILABLE:
-                formats.append("Word (.docx)")
+            formats = DownloadService.get_available_formats()
 
             format_choice_history = st.selectbox(
                 "Format auswählen (Historie)",
@@ -130,44 +121,16 @@ def main():
                 key="download_format_history"
             )
 
-            clean_filename = os.path.splitext(selected_old_chat['filename'])[0]
-            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-            safe_filename = re.sub(r'[^a-zA-Z0-9_]', '', clean_filename.lower().replace(" ", "_"))
-            safe_type = "historie"
+            base_filename = os.path.splitext(selected_old_chat['filename'])[0]
 
-            if format_choice_history == "Markdown (.md)":
-                file_data = markdown_content
-                file_name = f"{date_str}_{safe_type}_{safe_filename}.md"
-                mime = "text/markdown"
-
-            elif format_choice_history == "Text (.txt)":
-                plain_text = markdown_content.replace("# ", "").replace("## ", "")
-                file_data = plain_text
-                file_name = f"{date_str}_{safe_type}_{safe_filename}.txt"
-                mime = "text/plain"
-
-            elif format_choice_history == "Word (.docx)" and DOCX_AVAILABLE:
-                doc = Document()
-                doc.add_heading("Historie", 0)
-
-                for line in markdown_content.split("\n"):
-                    if line.startswith("# "):
-                        doc.add_heading(line.replace("# ", ""), level=1)
-                    elif line.startswith("## "):
-                        doc.add_heading(line.replace("## ", ""), level=2)
-                    elif line.startswith("- "):
-                        doc.add_paragraph(line, style="List Bullet")
-                    else:
-                        doc.add_paragraph(line)
-
-                buffer = io.BytesIO()
-                doc.save(buffer)
-                buffer.seek(0)
-
-                file_data = buffer
-                file_name = f"{date_str}_{safe_type}_{safe_filename}.docx"
-                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
+            file_data, file_name, mime = DownloadService.generate_file(
+                markdown_content=markdown_content,
+                format_choice=format_choice_history,
+                filename=base_filename,
+                prefix="historie",
+                title="Historie"
+            )
+            
             st.download_button(
                 label=f"⬇️ Als {format_choice_history} herunterladen",
                 data=file_data,
@@ -175,6 +138,7 @@ def main():
                 mime=mime,
                 key=f"download_history_{selected_old_chat['id']}"
             )
+
         elif uploaded_file:
             st.audio(uploaded_file)
             if st.button(f"{selected_action} starten"):
@@ -228,7 +192,7 @@ def main():
                         st.error(f"Fehler: {e}")
 
         if not selected_old_chat and "last_result" in st.session_state:
-            timestamp = datetime.datetime.now().strftime("%d.%m.%Y • %H:%M Uhr")
+            timestamp = DownloadService.get_timestamp()
             markdown_content = f"""# 📄 KI Ergebnis
 
 **Datei:** {st.session_state.last_filename}  
@@ -243,9 +207,7 @@ def main():
             
             st.divider()
             st.subheader("📥 Download")
-            formats = ["Markdown (.md)", "Text (.txt)"]
-            if DOCX_AVAILABLE:
-                formats.append("Word (.docx)")
+            formats = DownloadService.get_available_formats()
 
             format_choice = st.selectbox(
                 "Format auswählen",
@@ -253,55 +215,23 @@ def main():
                 key="download_format"
             )
 
-            clean_filename = os.path.splitext(st.session_state.last_filename)[0]
-            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-            safe_filename = re.sub(r'[^a-zA-Z0-9_]', '', clean_filename.lower().replace(" ", "_"))
-            safe_action = re.sub(
-                r'[^a-zA-Z0-9_]', 
-                '', 
-                st.session_state.last_action.lower().replace(" ", "_")
+            base_filename = os.path.splitext(st.session_state.last_filename)[0]
+
+            file_data, file_name, mime = DownloadService.generate_file(
+                markdown_content=markdown_content,
+                format_choice=format_choice,
+                filename=base_filename,
+                prefix=st.session_state.last_action,
+                title=f"KI Ergebnis – {st.session_state.last_action}"
             )
-
-            if format_choice == "Markdown (.md)":
-                file_data = markdown_content
-                file_name = f"{date_str}_{safe_action}_{safe_filename}.md"
-                mime = "text/markdown"
-
-            elif format_choice == "Text (.txt)":
-                plain_text = markdown_content.replace("# ", "").replace("## ", "")
-                file_data = plain_text
-                file_name = f"{date_str}_{safe_action}_{safe_filename}.txt"
-                mime = "text/plain"
-
-            elif format_choice == "Word (.docx)" and DOCX_AVAILABLE:
-                doc = Document()
-                doc.add_heading(f"KI Ergebnis – {st.session_state.last_action}", 0)
-
-                # Markdown grob in Word übernehmen
-                for line in markdown_content.split("\n"):
-                    if line.startswith("# "):
-                        doc.add_heading(line.replace("# ", ""), level=1)
-                    elif line.startswith("## "):
-                        doc.add_heading(line.replace("## ", ""), level=2)
-                    elif line.startswith("- "):
-                        doc.add_paragraph(line, style="List Bullet")
-                    else:
-                        doc.add_paragraph(line)
-
-                buffer = io.BytesIO()
-                doc.save(buffer)
-                buffer.seek(0)
-
-                file_data = buffer
-                file_name = f"{date_str}_{safe_action}_{safe_filename}.docx"
-                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
+                
             st.download_button(
                 label=f"⬇️ Als {format_choice} herunterladen",
                 data=file_data,
                 file_name=file_name,
                 mime=mime,
-                key=f"download_result_{clean_filename}"
+                key=f"download_result_{base_filename}"
             )
+            
 if __name__ == "__main__":
     main()
