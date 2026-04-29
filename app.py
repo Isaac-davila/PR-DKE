@@ -1,6 +1,9 @@
-import streamlit as st
-import time
+import os
 
+import streamlit as st
+import datetime
+
+from download_service import DownloadService
 from pipeline import run_pipeline
 from views.views import render_ui, render_sidebar_history
 from ai_service import process_with_ai_action
@@ -22,6 +25,8 @@ from views.admin_view import render_admin_view
 def main():
     st.set_page_config(page_title="DKE Audio Agent", layout="wide")
 
+    if "result" not in st.session_state:
+        st.session_state.result = None
     if "user" not in st.session_state:
         st.session_state.user = None
     if "view" not in st.session_state:
@@ -92,12 +97,54 @@ def main():
             st.divider()
             st.subheader(f"Historie: {selected_old_chat['filename']}")
             st.write(selected_old_chat['content'])
+
+            timestamp = DownloadService.get_timestamp()
+            markdown_content = f"""# 📄 Historie
+
+**Datei:** {selected_old_chat['filename']}  
+**Typ:** Gespeicherter Eintrag  
+**Heruntergeladen am:** {timestamp}
+
+---
+
+## 📝 Inhalt
+{selected_old_chat['content']}
+"""
+
+            st.divider()
+            st.subheader("📥 Download")
+            formats = DownloadService.get_available_formats()
+
+            format_choice_history = st.selectbox(
+                "Format auswählen (Historie)",
+                formats,
+                key="download_format_history"
+            )
+
+            base_filename = os.path.splitext(selected_old_chat['filename'])[0]
+
+            file_data, file_name, mime = DownloadService.generate_file(
+                markdown_content=markdown_content,
+                format_choice=format_choice_history,
+                filename=base_filename,
+                prefix="historie",
+                title="Historie"
+            )
+            
+            st.download_button(
+                label=f"⬇️ Als {format_choice_history} herunterladen",
+                data=file_data,
+                file_name=file_name,
+                mime=mime,
+                key=f"download_history_{selected_old_chat['id']}"
+            )
+
         elif uploaded_file:
             st.audio(uploaded_file)
             if st.button(f"{selected_action} starten"):
                 with st.spinner("KI arbeitet..."):
                     try:
-                        st.session_state.current_filename = []
+                        st.session_state.current_filename = None
                         st.session_state.current_entry_id = None
                         if pipeline_mode == "Groq (nur Transkription)":
                             transcript = transcribe_audio(uploaded_file)
@@ -116,6 +163,9 @@ def main():
                         st.session_state.current_results.append({"action": selected_action,"result": text_result})
                         st.success("Erledigt!")
                         st.write(text_result)
+                        st.session_state.last_result = text_result
+                        st.session_state.last_filename = uploaded_file.name
+                        st.session_state.last_action = selected_action
                     except Exception as e:
                         st.error(f"Fehler: {e}")
         if st.session_state.current_transcript:
@@ -140,5 +190,48 @@ def main():
                         st.write(text_result)
                     except Exception as e:
                         st.error(f"Fehler: {e}")
+
+        if not selected_old_chat and "last_result" in st.session_state:
+            timestamp = DownloadService.get_timestamp()
+            markdown_content = f"""# 📄 KI Ergebnis
+
+**Datei:** {st.session_state.last_filename}  
+**Aktion:** {st.session_state.last_action}  
+**Heruntergeladen am:** {timestamp}
+
+---
+
+## 📝 Inhalt
+{st.session_state.last_result}
+"""
+            
+            st.divider()
+            st.subheader("📥 Download")
+            formats = DownloadService.get_available_formats()
+
+            format_choice = st.selectbox(
+                "Format auswählen",
+                formats,
+                key="download_format"
+            )
+
+            base_filename = os.path.splitext(st.session_state.last_filename)[0]
+
+            file_data, file_name, mime = DownloadService.generate_file(
+                markdown_content=markdown_content,
+                format_choice=format_choice,
+                filename=base_filename,
+                prefix=st.session_state.last_action,
+                title=f"KI Ergebnis – {st.session_state.last_action}"
+            )
+                
+            st.download_button(
+                label=f"⬇️ Als {format_choice} herunterladen",
+                data=file_data,
+                file_name=file_name,
+                mime=mime,
+                key=f"download_result_{base_filename}"
+            )
+            
 if __name__ == "__main__":
     main()
