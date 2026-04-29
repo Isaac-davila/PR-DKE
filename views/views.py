@@ -7,7 +7,8 @@ def render_ui():
         action = st.selectbox(
             "Was möchtest du tun?",
             ["Transkribieren", "Zusammenfassen", "Wichtige Punkte extrahieren"],
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            key="action_selectbox"
         )
     with col2:
         uploaded_file = st.file_uploader("Upload Audio", type=["mp3"], label_visibility="collapsed")
@@ -23,7 +24,8 @@ def render_ui():
             "assemblyai": "☁️ AssemblyAI (Transkription + Diarisierung)"
         }[x],
         horizontal=True,
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="pipeline_mode"
     )
 
     return action, uploaded_file, mode
@@ -35,8 +37,13 @@ def render_sidebar_history(entries):
         if not entries:
             st.write("Keine Einträge.")
             return None
-        selected_entry = None
+        if "selected_history" not in st.session_state:
+            st.session_state.selected_history = None
         for entry in entries:
+            is_selected = (
+                st.session_state.selected_history is not None and
+                st.session_state.selected_history.get("id") == entry["id"]
+            )
+            
             if st.button(f"📄 {entry['filename'][:20]}...", key=entry['id'], use_container_width=True):
-                selected_entry = entry
-        return selected_entry
+                st.session_state.selected_history = entry

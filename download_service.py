@@ -89,3 +89,11 @@ class DownloadService:
     @staticmethod
     def get_timestamp():
         return datetime.datetime.now().strftime("%d.%m.%Y • %H:%M Uhr")
+    
+    @staticmethod
+    def build_chat_markdown(results):
+        return "\n\n".join(
+            f"## {item.get('action', 'Unbekannt')}\n"
+            f"{item.get('result', '')}"
+            for item in results
+        )
