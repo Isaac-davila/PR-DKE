@@ -144,16 +144,11 @@ def main():
             if st.button(f"{selected_action} starten"):
                 with st.spinner("KI arbeitet..."):
                     try:
+                        st.session_state.current_transcript = None
                         st.session_state.current_filename = None
                         st.session_state.current_entry_id = None
-                        if pipeline_mode == "Groq (nur Transkription)":
-                            transcript = transcribe_audio(uploaded_file)
-                        elif pipeline_mode == "Groq + Lokale Diarisierung (CPU)":
-                            transcript = run_pipeline(uploaded_file, "Transkribieren", "local")
-                        elif pipeline_mode == "AssemblyAI (Transkription + Diarisierung)":
-                            transcript = run_pipeline(uploaded_file, "Transkribieren", "assembly")
-                        else:
-                            transcript = transcribe_audio(uploaded_file)
+                        st.session_state.current_results = []
+                        transcript = run_pipeline(uploaded_file, pipeline_mode)
                         st.session_state.current_transcript = transcript
                         st.session_state.current_filename = uploaded_file.name
                         text_result, ai_tags = process_with_ai_action(transcript, selected_action)

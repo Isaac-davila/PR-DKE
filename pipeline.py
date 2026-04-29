@@ -24,13 +24,10 @@ def _format_segments_as_text(segments: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _run_groq_only(uploaded_file, action: str) -> str:
-    """
-    Existing Groq path — transcription + optional LLM action.
-    Calls ai_service directly, no diarization.
-    """
-    result, _ = process_with_ai_action(uploaded_file, action)
-    return result
+def _run_groq_only(uploaded_file) -> str:
+    transcript = transcribe_audio(uploaded_file)
+    return transcript
+
 
 
 def _run_groq_local(uploaded_file, action: str) -> str:
@@ -61,32 +58,13 @@ def _run_groq_local(uploaded_file, action: str) -> str:
         if segments:
             segments[0]["text"] = full_transcript
 
-        formatted = _format_segments_as_text(segments)
-
-        # Step 4: If action needs LLM processing, run it on the formatted transcript
-        if action == "Transkribieren":
-            return formatted
-
-        from groq import Groq
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        prompts = {
-            "Zusammenfassen": "Fasse kurz zusammen.",
-            "Wichtige Punkte extrahieren": "Extrahiere Kernpunkte."
-        }
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": prompts.get(action, "")},
-                {"role": "user", "content": formatted}
-            ]
-        )
-        return completion.choices[0].message.content
-
+        formatted =  _format_segments_as_text(segments)
+        return formatted
     finally:
         os.unlink(tmp_path)  # Always clean up the temp file
 
 
-def _run_assemblyai(uploaded_file, action: str) -> str:
+def _run_assemblyai(uploaded_file) -> str:
     """
     AssemblyAI path — handles transcription + diarization in one API call.
     Returns speaker-labeled segments, then optionally runs Groq LLM on them.
@@ -110,29 +88,11 @@ def _run_assemblyai(uploaded_file, action: str) -> str:
         }
         for utt in transcript.utterances
     ]
-
     formatted = _format_segments_as_text(segments)
-
-    if action == "Transkribieren":
-        return formatted
-
-    from groq import Groq
-    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-    prompts = {
-        "Zusammenfassen": "Fasse kurz zusammen.",
-        "Wichtige Punkte extrahieren": "Extrahiere Kernpunkte."
-    }
-    completion = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": prompts.get(action, "")},
-            {"role": "user", "content": formatted}
-        ]
-    )
-    return completion.choices[0].message.content
+    return formatted
 
 
-def run_pipeline(uploaded_file, action: str, mode: str) -> str:
+def run_pipeline(uploaded_file, mode: str) -> str:
     """
     Main entry point. Routes to the correct pipeline based on mode.
 
@@ -145,10 +105,10 @@ def run_pipeline(uploaded_file, action: str, mode: str) -> str:
         Formatted string result ready to display and save.
     """
     if mode == "groq":
-        return _run_groq_only(uploaded_file, action)
+        return _run_groq_only(uploaded_file)
     elif mode == "groq_local":
-        return _run_groq_local(uploaded_file, action)
+        return _run_groq_local(uploaded_file)
     elif mode == "assemblyai":
-        return _run_assemblyai(uploaded_file, action)
+        return _run_assemblyai(uploaded_file)
     else:
         raise ValueError(f"Unknown pipeline mode: {mode}")
