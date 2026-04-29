@@ -2,6 +2,7 @@ import os
 
 import streamlit as st
 import datetime
+import uuid
 
 from download_service import DownloadService
 from pipeline import run_pipeline
@@ -148,11 +149,20 @@ def main():
                         st.session_state.current_filename = None
                         st.session_state.current_entry_id = None
                         st.session_state.current_results = []
+
+                        #Hier audio uploaden
+                        audio_path = f"{user.id}/{uuid.uuid4()}_{uploaded_file.name}"
+                        file_bytes = uploaded_file.getvalue()
+
+                        supabase.storage.from_("audio-files").upload(audio_path, file_bytes)
+                        uploaded_file.seek(0)
+
+                        #Transkript erstellen und mit diesem dann weiter arbeiten
                         transcript = run_pipeline(uploaded_file, pipeline_mode)
                         st.session_state.current_transcript = transcript
                         st.session_state.current_filename = uploaded_file.name
                         text_result, ai_tags = process_with_ai_action(transcript, selected_action)
-                        result = save_to_supabase(uploaded_file.name, text_result, user.id, transcript, ai_tags)
+                        result = save_to_supabase(uploaded_file.name, text_result, user.id, transcript, ai_tags, audio_path)
                         if(result.data and len(result.data) > 0):
                             st.session_state.current_entry_id = result.data[0]["id"]
                         st.session_state.current_results.append({"action": selected_action,"result": text_result})
