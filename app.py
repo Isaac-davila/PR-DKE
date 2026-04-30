@@ -78,6 +78,7 @@ def main():
         if st.session_state.view != "main":
             if st.button("🏠 Zurück"):
                 st.session_state.view = "main"
+                st.session_state.selected_history = None
                 st.rerun()
 
         if st.button("Abmelden"):
@@ -88,7 +89,8 @@ def main():
         st.divider()
         # Historie laden (Logik für Admin/Basic ist in database.py)
         history_data = get_transcription_history(user_id=user.id, limit=15)
-        selected_old_chat = render_sidebar_history(history_data)
+        render_sidebar_history(history_data)
+        selected_old_chat = st.session_state.get("selected_history")
 
     if st.session_state.view == "admin" and user_is_admin:
         render_admin_view(user)
@@ -141,6 +143,7 @@ def main():
             )
 
         elif uploaded_file:
+            st.session_state.selected_history = None
             st.audio(uploaded_file)
             if st.button(f"{selected_action} starten"):
                 with st.spinner("KI arbeitet..."):
@@ -193,21 +196,29 @@ def main():
                         st.session_state.current_results.append({"action": followup_action, "result": text_result})
                         st.success("Neues Ergebnis erstellt!")
                         st.write(text_result)
+                        st.session_state.last_result = text_result
+                        st.session_state.last_action = followup_action
                     except Exception as e:
                         st.error(f"Fehler: {e}")
 
-        if not selected_old_chat and "last_result" in st.session_state:
+        if not selected_old_chat and st.session_state.current_results:
+
+            full_content = DownloadService.build_chat_markdown(
+                st.session_state.current_results
+            )
+
             timestamp = DownloadService.get_timestamp()
+
             markdown_content = f"""# 📄 KI Ergebnis
 
 **Datei:** {st.session_state.last_filename}  
-**Aktion:** {st.session_state.last_action}  
+**Aktionen:** {st.session_state.last_action}  
 **Heruntergeladen am:** {timestamp}
 
 ---
 
 ## 📝 Inhalt
-{st.session_state.last_result}
+{full_content}
 """
             
             st.divider()
