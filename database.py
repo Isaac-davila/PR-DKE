@@ -13,7 +13,7 @@ def get_supabase_client():
     return create_client(url, key)
 
 
-supabase = get_supabase_client()
+supabase = get_supabase_client()git clone https://github.com/Isaac-davila/PR-DKE.git
 
 
 # --- AUTHENTIFIZIERUNG ---
