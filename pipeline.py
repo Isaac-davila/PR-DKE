@@ -1,12 +1,31 @@
 import os
+import re
 import tempfile
 
-from assemblyai import SpeechModel
 from dotenv import load_dotenv
 from ai_service import transcribe_audio, process_with_ai_action
 from diarize import diarize
 
 load_dotenv()
+
+
+def extract_speakers(transcript: str) -> list:
+    """Return ordered unique speaker labels found in a diarized transcript."""
+    matches = re.findall(r'\[([^\]@]+?)\s*@', transcript)
+    seen = []
+    for m in matches:
+        if m not in seen:
+            seen.append(m)
+    return seen
+
+
+def apply_speaker_mapping(transcript: str, mapping: dict) -> str:
+    """Replace speaker labels in a transcript with user-supplied names."""
+    for original, name in mapping.items():
+        name = name.strip()
+        if name and name != original:
+            transcript = transcript.replace(f"[{original} @", f"[{name} @")
+    return transcript
 
 
 def _format_segments_as_text(segments: list[dict]) -> str:
@@ -30,7 +49,7 @@ def _run_groq_only(uploaded_file) -> str:
 
 
 
-def _run_groq_local(uploaded_file, action: str) -> str:
+def _run_groq_local(uploaded_file) -> str:
     """
     Groq transcription + local pyannote diarization.
 
@@ -74,9 +93,12 @@ def _run_assemblyai(uploaded_file) -> str:
     if not aai.settings.api_key:
         raise ValueError("ASSEMBLYAI_API_KEY not found in .env file.")
 
-    config = aai.TranscriptionConfig(speaker_labels=True, speech_models=["universal-2"]) #fuck this
+    config = aai.TranscriptionConfig(speaker_labels=True, speech_models=["universal-2"])
     transcriber = aai.Transcriber()
     transcript = transcriber.transcribe(uploaded_file, config=config)
+
+    if transcript.error:
+        raise RuntimeError(f"AssemblyAI transcription failed: {transcript.error}")
 
     # Normalize AssemblyAI output into our segment format
     segments = [
@@ -86,7 +108,7 @@ def _run_assemblyai(uploaded_file) -> str:
             "end": round(utt.end / 1000, 3),
             "text": utt.text
         }
-        for utt in transcript.utterances
+        for utt in (transcript.utterances or [])
     ]
     formatted = _format_segments_as_text(segments)
     return formatted

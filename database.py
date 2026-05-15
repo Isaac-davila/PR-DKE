@@ -13,7 +13,7 @@ def get_supabase_client():
     return create_client(url, key)
 
 
-supabase = get_supabase_client()git clone https://github.com/Isaac-davila/PR-DKE.git
+supabase = get_supabase_client() #git clone https://github.com/Isaac-davila/PR-DKE.git
 
 
 # --- AUTHENTIFIZIERUNG ---
@@ -96,8 +96,16 @@ def get_transcription_history(user_id=None, limit=15):
         return []
 
 
-def save_to_supabase(filename, text_content, user_id, transcript=None, tag_ids=None, audio_path=None):
-    data = {"filename": filename, "content": text_content, "transcript": transcript, "user_id": user_id, "tag_ids": tag_ids or [], "audio_path": audio_path}
+def save_to_supabase(filename, text_content, user_id, transcript=None, tag_ids=None, audio_path=None, speaker_mapping=None):
+    data = {
+        "filename": filename,
+        "content": text_content,
+        "transcript": transcript,
+        "user_id": user_id,
+        "tag_ids": tag_ids or [],
+        "audio_path": audio_path,
+        "speaker_mapping": speaker_mapping or {},
+    }
     return supabase.table("transcriptions").insert(data).execute()
 
 

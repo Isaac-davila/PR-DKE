@@ -5,7 +5,7 @@ import datetime
 import uuid
 
 from download_service import DownloadService
-from pipeline import run_pipeline
+from pipeline import run_pipeline, extract_speakers, apply_speaker_mapping
 from views.views import render_ui, render_sidebar_history
 from ai_service import process_with_ai_action
 from ai_service import transcribe_audio
@@ -37,6 +37,7 @@ def main():
     if "current_filename" not in st.session_state: st.session_state.current_filename = None
     if "current_results" not in st.session_state: st.session_state.current_results = []
     if "current_entry_id" not in st.session_state: st.session_state.current_entry_id = None
+    if "pending_rename" not in st.session_state: st.session_state.pending_rename = None
 
     # Token Exchange
     if "code" in st.query_params:
@@ -140,6 +141,47 @@ def main():
                 key=f"download_history_{selected_old_chat['id']}"
             )
 
+        elif st.session_state.pending_rename:
+            pending = st.session_state.pending_rename
+            st.subheader("Sprecher benennen")
+            st.caption(f"Datei: {pending['filename']}")
+            st.info("Die KI hat mehrere Sprecher erkannt. Gib jedem Sprecher einen Namen:")
+
+            speaker_names = {}
+            for speaker in pending["speakers"]:
+                speaker_names[speaker] = st.text_input(
+                    f"Name für {speaker}", value=speaker, key=f"spk_{speaker}"
+                )
+
+            col_confirm, col_cancel = st.columns([1, 1])
+            with col_confirm:
+                if st.button("Namen bestätigen und verarbeiten", type="primary"):
+                    with st.spinner("KI arbeitet..."):
+                        try:
+                            transcript = apply_speaker_mapping(pending["transcript"], speaker_names)
+                            text_result, ai_tags = process_with_ai_action(transcript, pending["action"])
+                            result = save_to_supabase(
+                                pending["filename"], text_result, user.id, transcript, ai_tags,
+                                pending["audio_path"], speaker_mapping=speaker_names
+                            )
+                            if result.data and len(result.data) > 0:
+                                st.session_state.current_entry_id = result.data[0]["id"]
+                            st.session_state.current_transcript = transcript
+                            st.session_state.current_filename = pending["filename"]
+                            st.session_state.current_results = [{"action": pending["action"], "result": text_result}]
+                            st.session_state.last_result = text_result
+                            st.session_state.last_filename = pending["filename"]
+                            st.session_state.last_action = pending["action"]
+                            st.session_state.pending_rename = None
+                            st.success("Erledigt!")
+                            st.write(text_result)
+                        except Exception as e:
+                            st.error(f"Fehler: {e}")
+            with col_cancel:
+                if st.button("Abbrechen"):
+                    st.session_state.pending_rename = None
+                    st.rerun()
+
         elif uploaded_file:
             st.audio(uploaded_file)
             if st.button(f"{selected_action} starten"):
@@ -150,27 +192,36 @@ def main():
                         st.session_state.current_entry_id = None
                         st.session_state.current_results = []
 
-                        #Hier audio uploaden
                         audio_path = f"{user.id}/{uuid.uuid4()}_{uploaded_file.name}"
                         file_bytes = uploaded_file.getvalue()
-
                         supabase.storage.from_("audio-files").upload(audio_path, file_bytes)
                         uploaded_file.seek(0)
 
-                        #Transkript erstellen und mit diesem dann weiter arbeiten
                         transcript = run_pipeline(uploaded_file, pipeline_mode)
-                        st.session_state.current_transcript = transcript
-                        st.session_state.current_filename = uploaded_file.name
-                        text_result, ai_tags = process_with_ai_action(transcript, selected_action)
-                        result = save_to_supabase(uploaded_file.name, text_result, user.id, transcript, ai_tags, audio_path)
-                        if(result.data and len(result.data) > 0):
-                            st.session_state.current_entry_id = result.data[0]["id"]
-                        st.session_state.current_results.append({"action": selected_action,"result": text_result})
-                        st.success("Erledigt!")
-                        st.write(text_result)
-                        st.session_state.last_result = text_result
-                        st.session_state.last_filename = uploaded_file.name
-                        st.session_state.last_action = selected_action
+                        speakers = extract_speakers(transcript)
+
+                        if speakers:
+                            st.session_state.pending_rename = {
+                                "transcript": transcript,
+                                "filename": uploaded_file.name,
+                                "action": selected_action,
+                                "audio_path": audio_path,
+                                "speakers": speakers,
+                            }
+                            st.rerun()
+                        else:
+                            st.session_state.current_transcript = transcript
+                            st.session_state.current_filename = uploaded_file.name
+                            text_result, ai_tags = process_with_ai_action(transcript, selected_action)
+                            result = save_to_supabase(uploaded_file.name, text_result, user.id, transcript, ai_tags, audio_path)
+                            if result.data and len(result.data) > 0:
+                                st.session_state.current_entry_id = result.data[0]["id"]
+                            st.session_state.current_results.append({"action": selected_action, "result": text_result})
+                            st.success("Erledigt!")
+                            st.write(text_result)
+                            st.session_state.last_result = text_result
+                            st.session_state.last_filename = uploaded_file.name
+                            st.session_state.last_action = selected_action
                     except Exception as e:
                         st.error(f"Fehler: {e}")
         if st.session_state.current_transcript:

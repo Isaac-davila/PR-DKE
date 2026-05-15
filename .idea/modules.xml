@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/SpToTx.iml" filepath="$PROJECT_DIR$/.idea/SpToTx.iml" />
+      <module fileurl="file://$PROJECT_DIR$/PR-DKE.iml" filepath="$PROJECT_DIR$/PR-DKE.iml" />
     </modules>
   </component>
 </project>
