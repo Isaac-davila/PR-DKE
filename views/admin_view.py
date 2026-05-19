@@ -1,70 +1,175 @@
 import streamlit as st
 import time
-from database import get_all_users, get_all_tags, get_user_tags, assign_tag_to_user, remove_tag_from_user, create_tag
+from database import (
+    get_all_users,
+    get_all_tags,
+    get_user_tags,
+    assign_tag_to_user,
+    remove_tag_from_user,
+    create_tag,
+    delete_tag,  # <--- NEU IMPORTIERT
+)
+
+# Re-use the shared CSS from views.py
+try:
+    from views.views import inject_css
+except ImportError:
+    def inject_css():
+        pass  # Fallback if called standalone
+
+
+def _tag_pill(label: str) -> str:
+    """Returns an inline HTML tag pill."""
+    return (
+        f"<span style='"
+        f"display:inline-block; background:var(--accent-soft); color:var(--accent);"
+        f"border-radius:99px; padding:4px 14px; font-size:0.75rem;"
+        f"font-weight:600; margin:4px 6px 12px 0; letter-spacing:0.02em;'>"
+        f"{label}</span>"
+    )
 
 
 def render_admin_view(user):
-    st.title("🛡️ Admin-Management")
-    users, tags = get_all_users(), get_all_tags()
+    """
+    Modern Admin console.
+    Two sections: Manage user rights (add/remove tags seamlessly) & Create/Delete system tags.
+    """
+    inject_css()
 
-    # --- NUTZER-RECHTE PRÜFEN & LÖSCHEN ---
-    st.subheader("🔍 Nutzer-Rechte prüfen & verwalten")
-    if users:
-        u_map = {u['email']: u['id'] for u in users}
-        sel_u_check = st.selectbox("Nutzer auswählen zum Verwalten", list(u_map.keys()), key="admin_check_u")
+    st.markdown("## 🛡️ Admin-Konsole")
+    st.markdown(
+        "<p style='color:var(--text-muted);font-size:0.9rem;margin-top:-0.5rem;'>"
+        "Nutzerrechte verwalten und Tags für das gesamte System organisieren."
+        "</p>",
+        unsafe_allow_html=True,
+    )
 
-        if sel_u_check:
-            target_user_id = u_map[sel_u_check]
-            current_user_tags = get_user_tags(target_user_id)
+    users = get_all_users()
+    tags = get_all_tags()
 
-            if current_user_tags:
-                st.write(f"Tags für **{sel_u_check}** (Klicke auf das ❌ zum Löschen):")
-                # Spaltenlayout für die Tags
-                tag_cols = st.columns(len(current_user_tags) + 1)
-                for i, t_name in enumerate(current_user_tags):
-                    # Eindeutiger Key für jeden Button
-                    if tag_cols[i].button(f"❌ {t_name}", key=f"del_{sel_u_check}_{t_name}"):
-                        success = remove_tag_from_user(target_user_id, t_name)
+    # Mapping für leichtere ID-Zuordnung
+    u_map = {u["email"]: u["id"] for u in users} if users else {}
+    t_map = {t["name"]: int(t["id"]) for t in tags} if tags else {}
+
+    if not users:
+        st.info("Keine Nutzer gefunden.")
+        return
+
+    st.markdown("<hr style='border-color:var(--border); margin:1.5rem 0;'>", unsafe_allow_html=True)
+
+    # ── Zwei-Spalten-Layout ────────────────────────────────────────
+    col_manage, col_create = st.columns([0.55, 0.45], gap="large")
+
+    # ── Spalte 1: Nutzer-Rechte (Tags zuweisen / entfernen) ──
+    with col_manage:
+        st.markdown("### 👤 Nutzer-Rechte")
+        st.caption("Wähle einen Nutzer, um seine Tags zu bearbeiten.")
+
+        selected_email = st.selectbox(
+            "Nutzer",
+            list(u_map.keys()),
+            key="admin_user_select",
+            label_visibility="collapsed"
+        )
+
+        if selected_email:
+            target_id = u_map[selected_email]
+            current_tags = get_user_tags(target_id)
+
+            with st.form(key=f"user_tags_form_{target_id}"):
+                new_selected_tags = st.multiselect(
+                    "Tags:",
+                    options=list(t_map.keys()),
+                    default=current_tags,
+                    label_visibility="collapsed"
+                )
+
+                submit_user_tags = st.form_submit_button("💾 Änderungen speichern", use_container_width=True)
+
+                if submit_user_tags:
+                    tags_to_add = set(new_selected_tags) - set(current_tags)
+                    tags_to_remove = set(current_tags) - set(new_selected_tags)
+
+                    # Verhindern, dass man sich selbst den Admin-Tag wegnimmt (Schutzmaßnahme)
+                    if "admin" in tags_to_remove and selected_email == user.email:
+                        st.error("Du kannst dir nicht selbst den Admin-Tag entziehen!")
+                    else:
+                        success = True
+                        for t_name in tags_to_add:
+                            assign_tag_to_user(target_id, t_map[t_name])
+                        for t_name in tags_to_remove:
+                            remove_ok = remove_tag_from_user(target_id, t_name)
+                            if not remove_ok: success = False
+
                         if success:
-                            st.success(f"Tag '{t_name}' wurde erfolgreich entfernt!")
-                            time.sleep(0.5)
-                            st.rerun()  # Erzwingt das Neuladen der Liste
+                            st.success(f"Tags für {selected_email} aktualisiert!")
+                            time.sleep(0.8)
+                            st.rerun()
                         else:
-                            st.error(
-                                f"Fehler: Tag '{t_name}' konnte nicht gelöscht werden. Prüfe die Datenbank-Policies (RLS)!")
-            else:
-                st.warning("Dieser Nutzer hat aktuell keine zugewiesenen Tags.")
+                            st.error("Fehler beim Speichern (RLS-Policy prüfen).")
 
-    st.divider()
+    # ── Spalte 2: Neue Tags erstellen & System-Tags löschen ──
+    with col_create:
+        st.markdown("### 🏷️ System-Tags")
+        st.caption("Erstelle neue oder verwalte bestehende Tags.")
 
-    col1, col2 = st.columns(2)
+        with st.form(key="create_tag_form", clear_on_submit=True):
+            new_tag_name = st.text_input(
+                "Tag-Name",
+                placeholder="z. B. projekt-alpha",
+                label_visibility="collapsed"
+            )
+            submit_new_tag = st.form_submit_button("✚ Tag erstellen", use_container_width=True)
 
-    # --- RECHTE VERGEBEN ---
-    with col1:
-        st.subheader("➕ Rechte vergeben")
-        if users and tags:
-            t_map = {t['name']: t['id'] for t in tags}
-            sel_u_assign = st.selectbox("Nutzer auswählen", list(u_map.keys()), key="admin_sel_u_assign")
-            sel_t_assign = st.selectbox("Tag auswählen", list(t_map.keys()), key="admin_sel_t_assign")
+            if submit_new_tag:
+                name = new_tag_name.strip()
+                if not name:
+                    st.warning("Bitte einen Tag-Namen eingeben.")
+                else:
+                    res = create_tag(name, user.id)
+                    if res == "exists":
+                        st.warning(f"Tag **{name}** existiert bereits.")
+                    elif res:
+                        st.success(f"Tag **{name}** erstellt!")
+                        time.sleep(0.8)
+                        st.rerun()
+                    else:
+                        st.error("Fehler beim Erstellen des Tags.")
 
-            if st.button("Tag zuweisen"):
-                if sel_u_assign and sel_t_assign:
-                    assign_tag_to_user(u_map[sel_u_assign], t_map[sel_t_assign])
-                    st.success(f"Tag '{sel_t_assign}' vergeben!")
-                    time.sleep(0.5)
-                    st.rerun()
-        else:
-            st.warning("Keine Nutzer oder Tags für die Zuweisung verfügbar.")
+        if tags:
+            st.markdown(
+                "<p style='font-size:0.8rem; color:var(--text-muted); margin:1.5rem 0 0.5rem;'>Vorhandene System-Tags:</p>",
+                unsafe_allow_html=True
+            )
+            pills_html = "".join(_tag_pill(t["name"]) for t in tags)
+            st.markdown(f"<div>{pills_html}</div>", unsafe_allow_html=True)
 
-    # --- GLOBALE TAGS ERSTELLEN ---
-    with col2:
-        st.subheader("🌍 Globaler Tag erstellen")
-        new_tag_name = st.text_input("Name des neuen Tags", key="admin_new_tag_input")
-        if st.button("Tag permanent erstellen"):
-            if new_tag_name:
-                create_tag(new_tag_name, user.id)
-                st.success(f"Tag '{new_tag_name}' wurde erstellt!")
-                time.sleep(0.5)
-                st.rerun()
-            else:
-                st.warning("Bitte gib einen Namen für den Tag ein.")
+            st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+            # --- NEU: Tag löschen (im Expander versteckt für ein aufgeräumtes UI) ---
+            # Wir filtern 'admin' und 'basic' aus, damit diese nie gelöscht werden können
+            deletable_tags = [t for t in t_map.keys() if t not in ["admin", "basic"]]
+
+            if deletable_tags:
+                with st.expander("🗑️ Tag löschen"):
+                    st.markdown(
+                        "<p style='font-size:0.8rem; color:var(--error); margin-bottom:8px;'>"
+                        "<b>Achtung:</b> Dies entfernt den Tag permanent bei allen Nutzern und Transkripten."
+                        "</p>", unsafe_allow_html=True
+                    )
+
+                    tag_to_delete = st.selectbox(
+                        "Welchen Tag möchtest du löschen?",
+                        deletable_tags,
+                        key="delete_tag_select",
+                        label_visibility="collapsed"
+                    )
+
+                    if st.button("Unwiderruflich löschen"):
+                        success = delete_tag(t_map[tag_to_delete])
+                        if success:
+                            st.success(f"Tag '{tag_to_delete}' wurde erfolgreich gelöscht.")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Fehler beim Löschen des Tags.")

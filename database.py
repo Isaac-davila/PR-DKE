@@ -80,14 +80,32 @@ def is_admin(user_id):
 
 def get_transcription_history(user_id=None, limit=15):
     """
-    Admins und Basics sehen alles. Andere nur eigene.
+    Admins sehen alles.
+    Normale User sehen ihre eigenen Dokumente UND solche, mit denen sie einen Tag teilen.
     """
+    if not user_id:
+        return []
+
     try:
         query = supabase.table("transcriptions").select("*")
 
-        # Wenn KEIN Admin/Basic -> Filter auf eigene user_id
-        if not has_role(user_id, ["admin", "basic"]):
-            query = query.eq("user_id", user_id)
+        # Wenn der User KEIN Admin ist, müssen wir filtern
+        if not is_admin(user_id):
+            # 1. Hole alle Tag-IDs des aktuellen Users
+            tag_res = supabase.table("user_tags").select("tag_id").eq("user_id", user_id).execute()
+            user_tag_ids = [str(item['tag_id']) for item in tag_res.data if item.get('tag_id')]
+
+            # 2. Filter-Query zusammenbauen
+            if user_tag_ids:
+                # PostgREST Array-Syntax: "{1,2,3}"
+                tags_array_str = "{" + ",".join(user_tag_ids) + "}"
+
+                # Supabase OR-Filter:
+                # (Besitzer == Ich) ODER (Transkript-Tags überschneiden sich [.ov.] mit meinen Tags)
+                query = query.or_(f"user_id.eq.{user_id},tag_ids.ov.{tags_array_str}")
+            else:
+                # Fallback: User hat gar keine Tags, sieht nur seine eigenen Uploads
+                query = query.eq("user_id", user_id)
 
         res = query.order("created_at", desc=True).limit(limit).execute()
         return res.data
@@ -135,3 +153,15 @@ def remove_tag_from_user(user_id, tag_name):
 def update_transcription_entry(entry_id, text_content, tag_ids = None):
     data = {"content": text_content, "tag_ids": tag_ids or []}
     return supabase.table("transcriptions").update(data).eq("id", entry_id).execute()
+
+def delete_tag(tag_id):
+    """Löscht einen Tag komplett aus dem System (inkl. Zuweisungen)."""
+    try:
+        # 1. Zuerst aus user_tags löschen (verhindert Foreign-Key Constraint Fehler)
+        supabase.table("user_tags").delete().eq("tag_id", tag_id).execute()
+        # 2. Dann den Tag selbst löschen
+        res = supabase.table("tags").delete().eq("id", tag_id).execute()
+        return True if res.data else False
+    except Exception as e:
+        print(f"Fehler beim Löschen des Tags: {e}")
+        return False
