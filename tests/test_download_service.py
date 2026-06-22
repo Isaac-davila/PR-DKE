@@ -1,10 +1,8 @@
 from download_service import DownloadService
 
-
 def test_sanitize_filename():
     result = DownloadService.sanitize_filename("My File!.mp3")
     assert result == "my_filemp3"
-
 
 def test_create_txt():
     markdown = "# Titel\n## Untertitel\n---\nText"
@@ -15,7 +13,6 @@ def test_create_txt():
     assert "---" not in result
     assert "Titel" in result
 
-
 def test_build_filename():
     result = DownloadService.build_filename(
         "2026-06-08",
@@ -25,7 +22,6 @@ def test_build_filename():
     )
 
     assert result == "2026-06-08_summary_audiofile.txt"
-
 
 def test_generate_markdown_file():
     data, filename, mime = DownloadService.generate_file(
@@ -40,7 +36,6 @@ def test_generate_markdown_file():
     assert filename.endswith(".md")
     assert mime == "text/markdown"
 
-
 def test_generate_txt_file():
     data, filename, mime = DownloadService.generate_file(
         markdown_content="# Test",
@@ -53,3 +48,16 @@ def test_generate_txt_file():
     assert "Test" in data
     assert filename.endswith(".txt")
     assert mime == "text/plain"
+    
+def test_generate_docx_file():
+    data, filename, mime = DownloadService.generate_file(
+        markdown_content="# Test",
+        format_choice="Word (.docx)",
+        filename="audio",
+        prefix="summary",
+        title="Test"
+    )
+
+    assert data is not None
+    assert filename.endswith(".docx")
+    assert mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
